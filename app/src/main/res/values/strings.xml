@@ -1,3 +1,9 @@
 <resources>
     <string name="app_name">Top10 Downloader App</string>
+    <string name="free_apps_text">Free Apps</string>
+    <string name="paid_apps_text">Paid Apps</string>
+    <string name="songs_text">Songs</string>
+    <string name="top_10_text">Top 10</string>
+    <string name="top_25_text">Top 25</string>
+    <string name="refresh_text">Refresh</string>
 </resources>

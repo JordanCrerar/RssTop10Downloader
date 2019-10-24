@@ -4,9 +4,10 @@ import android.content.Context
 import android.os.AsyncTask
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
+import android.os.PersistableBundle
 import android.util.Log
-import android.widget.AbsListView
-import android.widget.ArrayAdapter
+import android.view.Menu
+import android.view.MenuItem
 import android.widget.ListView
 import kotlinx.android.synthetic.main.activity_main.*
 import java.net.URL
@@ -29,52 +30,118 @@ class FeedEntry {
 }
 
 class MainActivity : AppCompatActivity() {
-    private val TAG = "MainActivity"
-    private val downLoadData by lazy { DownloadData(this, xmlListView)}
+
+    val TAG = "MainActivity"
+    private var downLoadData: DownloadData? = null
+    private var feedUrl: String = "http://ax.itunes.apple.com/WebObjects/MZStoreServices.woa/ws/RSS/topfreeapplications/limit=%d/xml"
+    var feedLimit = 10
+
+    private var feedCashedUrl = "INVALIDATED"
+    private val STATE_URL = "feedUrl"
+    private val STATE_LIMIT = "feedLimit"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        Log.d(TAG, "onCreate: Called")
-        downLoadData.execute("http://ax.itunes.apple.com/WebObjects/MZStoreServices.woa/ws/RSS/topfreeapplications/limit=25/xml")
-        Log.d(TAG, "onCreate: Done")
+        if (savedInstanceState != null){
+            this.feedUrl = savedInstanceState.getString(STATE_URL)!!
+            feedLimit = savedInstanceState.getInt(STATE_LIMIT)
+        }
+
+        downLoadUrl(feedUrl.format(feedLimit))
+        Log.d(TAG, "onCreate: Done!! :)")
+
+    }
+
+    private fun downLoadUrl(feedUrl: String) {
+        if (feedUrl != feedCashedUrl){
+            Log.d(TAG, "downLoadUrl: starting AsyncTask")
+            downLoadData = DownloadData(this, xmlListView)
+            downLoadData?.execute(feedUrl)
+            feedCashedUrl = feedUrl
+            Log.d(TAG, "downLoadUrl: Done!! :)")
+        } else {
+            Log.d(TAG,"downLoadUrl - Url Not Changed")
+        }
+
+    }
+
+    override fun onCreateOptionsMenu(menu: Menu?): Boolean {
+        menuInflater.inflate(R.menu.feeds_menu, menu)
+        if (feedLimit == 10){
+            menu?.findItem(R.id.mnu10)?.isChecked = true
+        } else {
+            menu?.findItem(R.id.mnu25)?.isChecked = true
+        }
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+
+        when (item.itemId) {
+            R.id.mnuFree ->
+                feedUrl = "http://ax.itunes.apple.com/WebObjects/MZStoreServices.woa/ws/RSS/topfreeapplications/limit=%d/xml"
+            R.id.mnuPaid ->
+                feedUrl ="http://ax.itunes.apple.com/WebObjects/MZStoreServices.woa/ws/RSS/toppaidapplications/limit=%d/xml"
+            R.id.mnuSongs ->
+                feedUrl = "http://ax.itunes.apple.com/WebObjects/MZStoreServices.woa/ws/RSS/topsongs/limit=%d/xml"
+            R.id.mnu10, R.id.mnu25 -> {
+                if (!item.isChecked){
+                    item.isChecked = true
+                    feedLimit = 35 - feedLimit
+                    Log.d(TAG,"onOptionItemSelected: ${item.title} setting feedLimit to $feedLimit")
+                } else {
+                    Log.d(TAG,"onOptionsItemSelected: ${item.title} setting feedingLimit unchanged")
+                }
+            }
+            R.id.mnuRefresh -> feedCashedUrl = "INVALIDATED"
+            else ->
+                return super.onOptionsItemSelected(item)
+        }
+        downLoadUrl(feedUrl.format(feedLimit))
+        return true
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putString(STATE_URL, feedUrl)
+        outState.putInt(STATE_LIMIT, feedLimit)
     }
 
     override fun onDestroy() {
+        Log.d(TAG,"Saving downLoadedData")
         super.onDestroy()
-        downLoadData.cancel(true)
+        downLoadData?.cancel(true)
     }
 
     companion object {
-        private class DownloadData(context: Context, listView: ListView) : AsyncTask<String, Void, String>() {
-            private val TAG = "DownloadData"
+        private class DownloadData(context: Context, listView: ListView) :
+            AsyncTask<String, Void, String>() {
 
+            val TAG = "DownLoadData"
             var parentContext: Context by Delegates.notNull()
             var parentListView: ListView by Delegates.notNull()
 
-            init{
+            init {
                 parentContext = context
                 parentListView = listView
             }
 
-
-
             override fun onPostExecute(result: String) {
                 super.onPostExecute(result)
-//                Log.d(TAG, "onPostExecute: parameter is $result"
                 val parseApplication = ParseApplications()
                 parseApplication.parse(result)
 
-                val arrayAdapter = ArrayAdapter<FeedEntry>(parentContext, R.layout.list_item, parseApplication.applications)
-                parentListView.adapter = arrayAdapter
+                val feedAdapter =
+                    FeedAdapter(parentContext, R.layout.list_record, parseApplication.applications)
+                parentListView.adapter = feedAdapter
             }
 
             override fun doInBackground(vararg url: String?): String {
-                Log.d(TAG, "doInBackground: start with: ${url[0]}")
                 val rssFeed = downloadXML(url[0])
                 if (rssFeed.isEmpty()) {
-                    Log.e(TAG, "doInBackground: Error downloading")
+                    Log.e(TAG,"Error DownLoading!")
                 }
                 return rssFeed
             }
